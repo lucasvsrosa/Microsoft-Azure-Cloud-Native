@@ -1,0 +1,208 @@
+# Desafio DIO: Armazenando Dados de E-commerce na Cloud
+
+Este repositório documenta a implementação do desafio "Armazenando dados de um E-Commerce na Cloud" proposto pela Digital Innovation One (DIO), como parte da trilha Microsoft Application Platform.
+
+## 📋 Índice
+
+- [Introdução](#introdução)
+- [Tecnologias Utilizadas](#tecnologias-utilizadas)
+- [Passo 1: Criando o Dockerfile](#passo-1-criando-o-dockerfile)
+- [Passo 2: Criando o Resource Group e Container Registry](#passo-2-criando-o-resource-group-e-container-registry)
+- [Passo 3: Login no ACR](#passo-3-login-no-acr)
+- [Passo 4: Build e Push da Imagem Docker](#passo-4-build-e-push-da-imagem-docker)
+- [Insights e Aprendizados](#insights-e-aprendizados)
+- [Possibilidades Futuras](#possibilidades-futuras)
+
+## 📚 Introdução
+
+O objetivo deste projeto é demonstrar como podemos utilizar o Docker e o Azure Container Registry (ACR) para containerizar e armazenar de forma segura uma aplicação de e-commerce na nuvem. A containerização permite que nossa aplicação seja executada de maneira consistente em qualquer ambiente, enquanto o ACR fornece um repositório seguro e gerenciado para armazenar e distribuir nossas imagens Docker.
+
+Este projeto é parte do desafio proposto pela DIO para aplicar os conceitos aprendidos sobre Docker e Azure, criando uma solução prática que poderia ser implementada em um cenário real de e-commerce.
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Docker**: Plataforma para desenvolvimento, envio e execução de aplicações em contêineres
+- **Microsoft Azure**: Plataforma de computação em nuvem
+  - **Azure CLI**: Interface de linha de comando para gerenciar recursos do Azure
+  - **Azure Resource Group**: Contêiner lógico para agrupar recursos relacionados no Azure
+  - **Azure Container Registry (ACR)**: Serviço gerenciado para armazenar e gerenciar imagens de contêiner
+- **Git & GitHub**: Sistema de controle de versão e plataforma de hospedagem de código
+
+## 🐳 Passo 1: Criando o Dockerfile
+
+O primeiro passo foi criar um Dockerfile para containerizar nossa aplicação de e-commerce. O Dockerfile define como a imagem Docker será construída e quais componentes serão incluídos.
+
+```dockerfile
+# Utilizamos uma imagem base Python para nossa aplicação de e-commerce
+FROM python:3.9-slim
+
+# Definimos o diretório de trabalho dentro do contêiner
+WORKDIR /app
+
+# Copiamos os arquivos de dependências primeiro para aproveitar o cache do Docker
+COPY requirements.txt .
+
+# Instalamos as dependências da aplicação
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiamos o código da aplicação para o contêiner
+COPY . .
+
+# Expomos a porta que nossa aplicação utilizará
+EXPOSE 5000
+
+# Comando para iniciar a aplicação quando o contêiner for executado
+CMD ["python", "app.py"]
+```
+
+### Explicação do Dockerfile:
+
+1. **Imagem Base**: Utilizamos `python:3.9-slim` como base, que inclui o Python 3.9 em uma imagem Debian reduzida, economizando espaço.
+
+2. **Diretório de Trabalho**: Definimos `/app` como o diretório onde nossa aplicação será executada dentro do contêiner.
+
+3. **Gerenciamento de Dependências**: Copiamos primeiro apenas o arquivo `requirements.txt` e instalamos as dependências. Isso aproveita o cache em camadas do Docker, evitando reinstalações desnecessárias quando apenas o código da aplicação muda.
+
+4. **Código da Aplicação**: Copiamos todos os arquivos da aplicação para o contêiner.
+
+5. **Exposição de Porta**: Informamos que a aplicação utilizará a porta 5000, que precisará ser mapeada ao executar o contêiner.
+
+6. **Comando de Inicialização**: Definimos o comando que será executado quando o contêiner iniciar, neste caso, executando o arquivo principal da aplicação.
+
+## ☁️ Passo 2: Criando o Resource Group e Container Registry
+
+Após criar o Dockerfile, precisamos configurar os recursos necessários no Azure para armazenar nossa imagem Docker.
+
+### Criando o Resource Group:
+
+O Resource Group (Grupo de Recursos) é um contêiner lógico que agrupa recursos relacionados para uma solução Azure. Ele facilita o gerenciamento e a organização dos recursos.
+
+```bash
+# Comando para criar um novo Resource Group
+az group create --name rg-ecommerce-dio --location eastus
+```
+
+Este comando cria um novo Resource Group chamado "rg-ecommerce-dio" na região "eastus" (Leste dos EUA). A escolha da região pode impactar a latência e a disponibilidade dos serviços, então é importante selecionar uma região próxima aos seus usuários finais.
+
+### Criando o Azure Container Registry (ACR):
+
+O ACR é um serviço gerenciado que permite armazenar e gerenciar imagens de contêiner Docker privadas e outros artefatos.
+
+```bash
+# Comando para criar um novo Azure Container Registry
+az acr create --resource-group rg-ecommerce-dio --name acrecommercedio --sku Basic
+```
+
+Este comando cria um novo ACR chamado "acrecommercedio" no Resource Group "rg-ecommerce-dio", utilizando o plano "Basic". O ACR tem três níveis de serviço:
+
+- **Basic**: Otimizado para custo, ideal para desenvolvedores aprendendo sobre o ACR.
+- **Standard**: Oferece maior capacidade de armazenamento e throughput de imagem.
+- **Premium**: Fornece os mais altos níveis de armazenamento e operações simultâneas, com recursos adicionais como geo-replicação.
+
+Para este projeto, o plano Basic é suficiente, mas em um ambiente de produção real, você pode considerar os planos Standard ou Premium dependendo das necessidades de desempenho e escala.
+
+## 🔑 Passo 3: Login no ACR
+
+Antes de podermos enviar (push) nossa imagem Docker para o ACR, precisamos autenticar nosso cliente Docker local com o registro.
+
+```bash
+# Comando para fazer login no ACR
+az acr login --name acrecommercedio
+```
+
+Este comando utiliza suas credenciais do Azure CLI para autenticar com o ACR. Se a autenticação for bem-sucedida, você verá a mensagem "Login Succeeded".
+
+### Verificando a Autenticação:
+
+Para garantir que a autenticação foi bem-sucedida, podemos listar os repositórios no ACR:
+
+```bash
+# Comando para listar repositórios no ACR
+az acr repository list --name acrecommercedio --output table
+```
+
+Inicialmente, este comando não retornará nenhum repositório, pois ainda não enviamos nenhuma imagem.
+
+## 🚀 Passo 4: Build e Push da Imagem Docker
+
+Agora que temos nosso Dockerfile e o ACR configurado, podemos construir nossa imagem Docker e enviá-la para o registro.
+
+### Construindo a Imagem Docker:
+
+```bash
+# Comando para construir a imagem Docker
+docker build -t ecommerce-app:v1 .
+```
+
+Este comando constrói uma imagem Docker baseada no Dockerfile no diretório atual, com o nome "ecommerce-app" e a tag "v1".
+
+### Marcando a Imagem para o ACR:
+
+Antes de enviar a imagem para o ACR, precisamos marcá-la com o nome completo do servidor de login do ACR:
+
+```bash
+# Comando para marcar a imagem com o endereço do ACR
+docker tag ecommerce-app:v1 acrecommercedio.azurecr.io/ecommerce-app:v1
+```
+
+Este comando cria uma nova tag para nossa imagem, apontando para o endereço do nosso ACR.
+
+### Enviando a Imagem para o ACR:
+
+```bash
+# Comando para enviar a imagem para o ACR
+docker push acrecommercedio.azurecr.io/ecommerce-app:v1
+```
+
+Este comando envia nossa imagem Docker para o ACR. O processo pode levar alguns minutos, dependendo do tamanho da imagem e da velocidade da sua conexão com a internet.
+
+### Verificando o Upload:
+
+Para confirmar que nossa imagem foi enviada com sucesso, podemos listar os repositórios e as tags:
+
+```bash
+# Listar repositórios
+az acr repository list --name acrecommercedio --output table
+
+# Listar tags de um repositório específico
+az acr repository show-tags --name acrecommercedio --repository ecommerce-app --output table
+```
+
+Agora você deve ver o repositório "ecommerce-app" listado, com a tag "v1" disponível.
+
+## 💡 Insights e Aprendizados
+
+Durante a execução deste projeto, adquiri diversos conhecimentos importantes:
+
+1. **Containerização Eficiente**: Aprendi a criar Dockerfiles otimizados, utilizando o sistema de camadas do Docker para melhorar o processo de build e reduzir o tamanho final das imagens.
+
+2. **Segurança na Nuvem**: O ACR oferece um ambiente seguro para armazenar imagens Docker, com controle de acesso integrado ao Azure Active Directory e suporte para imagens privadas.
+
+3. **Integração entre Ferramentas**: A integração entre Docker local e o Azure Container Registry é fluida, permitindo um fluxo de trabalho eficiente do desenvolvimento à implantação.
+
+4. **Gerenciamento de Recursos**: O Azure Resource Groups facilita a organização e o gerenciamento dos recursos na nuvem, permitindo agrupar componentes relacionados e gerenciá-los como uma unidade.
+
+5. **Automação de Processos**: A Azure CLI permite automatizar tarefas repetitivas, facilitando a criação e configuração de recursos na nuvem através de scripts.
+
+## 🚀 Possibilidades Futuras
+
+Este projeto estabelece uma base sólida para várias melhorias e expansões futuras:
+
+1. **Implementação de CI/CD**: Integrar o GitHub Actions ou Azure DevOps para automatizar o processo de build e deploy da imagem Docker sempre que houver alterações no código.
+
+2. **Escalabilidade com Kubernetes**: Utilizar o Azure Kubernetes Service (AKS) para orquestrar múltiplos contêineres, permitindo escalabilidade horizontal e alta disponibilidade.
+
+3. **Monitoramento e Logging**: Implementar Azure Monitor e Application Insights para monitorar o desempenho e a saúde da aplicação em tempo real.
+
+4. **Segurança Avançada**: Utilizar o Azure Security Center para escanear vulnerabilidades nas imagens Docker e implementar políticas de segurança.
+
+5. **Geo-replicação**: Para aplicações de e-commerce globais, utilizar a geo-replicação do ACR (disponível no plano Premium) para reduzir a latência e melhorar a disponibilidade em diferentes regiões.
+
+6. **Integração com Outros Serviços Azure**: Conectar a aplicação com serviços como Azure SQL Database para armazenamento de dados, Azure Blob Storage para armazenamento de arquivos, e Azure CDN para entrega de conteúdo estático.
+
+---
+
+Este projeto foi desenvolvido como parte do desafio da Digital Innovation One (DIO) na trilha Microsoft Application Platform.
+
+*Autor: [Seu Nome]*
+*Data: Junho de 2025*
